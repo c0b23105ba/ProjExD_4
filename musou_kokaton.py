@@ -141,17 +141,19 @@ class Beam(pg.sprite.Sprite):
     """
     ビームに関するクラス
     """
-    def __init__(self, bird: Bird):
+    def __init__(self, bird: Bird,angle=0):
         """
         ビーム画像Surfaceを生成する
         引数 bird：ビームを放つこうかとん
+        引数　angle:ビームの回転角度
         """
         super().__init__()
         self.vx, self.vy = bird.dire
+        initial_angle =math.degrees(math.atan2(-self.vy,self.vx)) + angle
         angle = math.degrees(math.atan2(-self.vy, self.vx))
         self.image = pg.transform.rotozoom(pg.image.load(f"fig/beam.png"), angle, 2.0)
-        self.vx = math.cos(math.radians(angle))
-        self.vy = -math.sin(math.radians(angle))
+        self.vx = math.cos(math.radians(initial_angle))
+        self.vy = -math.sin(math.radians(initial_angle))
         self.rect = self.image.get_rect()
         self.rect.centery = bird.rect.centery+bird.rect.height*self.vy
         self.rect.centerx = bird.rect.centerx+bird.rect.width*self.vx
@@ -242,6 +244,31 @@ class Score:
         screen.blit(self.image, self.rect)
 
 
+
+class NeoBeam:
+    """
+    複数方向にビームを発射するクラス。
+    """
+    def __init__(self,bird:Bird,num:int):
+        """
+        NeoBeamクラスの初期化
+        引数1bird:ビームを発射するこうかとん
+        引数2num:発射するビームの数
+        """
+        self.beams=self.gen_beams(bird,num)
+    
+    def gen_beams(self,bird:Bird,num:int) ->list:
+        """
+        指定されたビーム数だけ異なる角度のビームを生成する。
+        """
+        beams=[]
+        angles=range(-50,51,100//(num-1))  # 角度を等間隔で設定
+        for angle in angles:
+            beams.append(Beam(bird,angle))
+        return beams
+        
+
+
 def main():
     pg.display.set_caption("真！こうかとん無双")
     screen = pg.display.set_mode((WIDTH, HEIGHT))
@@ -263,6 +290,11 @@ def main():
                 return 0
             if event.type == pg.KEYDOWN and event.key == pg.K_SPACE:
                 beams.add(Beam(bird))
+                if key_lst[pg.K_LSHIFT]:
+                    beams.add(*NeoBeam(bird,5).beams)
+                else:
+                    beams.add(Beam(bird))
+            
         screen.blit(bg_img, [0, 0])
 
         if tmr%200 == 0:  # 200フレームに1回，敵機を出現させる
