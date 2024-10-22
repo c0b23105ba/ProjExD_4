@@ -281,6 +281,10 @@ def main():
     exps = pg.sprite.Group()
     emys = pg.sprite.Group()
 
+    emp_active = False
+    emp_duration = 100
+    score_threshold = 20  # EMP発動に必要な最低スコア
+
     tmr = 0
     clock = pg.time.Clock()
     while True:
@@ -295,31 +299,61 @@ def main():
                 else:
                     beams.add(Beam(bird))
             
+
+        # 背景の描画を必ず最初に行う
         screen.blit(bg_img, [0, 0])
 
-        if tmr%200 == 0:  # 200フレームに1回，敵機を出現させる
+        # 敵機の生成
+        if tmr % 200 == 0:
             emys.add(Enemy())
 
+        # 敵機の爆弾投下処理
         for emy in emys:
-            if emy.state == "stop" and tmr%emy.interval == 0:
-                # 敵機が停止状態に入ったら，intervalに応じて爆弾投下
+            if emy.state == "stop" and tmr % emy.interval == 0:
                 bombs.add(Bomb(emy, bird))
 
+        # 敵機とビームの衝突判定
         for emy in pg.sprite.groupcollide(emys, beams, True, True).keys():
-            exps.add(Explosion(emy, 100))  # 爆発エフェクト
-            score.value += 10  # 10点アップ
-            bird.change_img(6, screen)  # こうかとん喜びエフェクト
+            exps.add(Explosion(emy, 100))
+            score.value += 10
+            bird.change_img(6, screen)
 
+        # 爆弾とビームの衝突判定
         for bomb in pg.sprite.groupcollide(bombs, beams, True, True).keys():
-            exps.add(Explosion(bomb, 50))  # 爆発エフェクト
-            score.value += 1  # 1点アップ
+            exps.add(Explosion(bomb, 50))
+            score.value += 1
 
+        # こうかとんと爆弾の衝突判定
         if len(pg.sprite.spritecollide(bird, bombs, True)) != 0:
-            bird.change_img(8, screen) # こうかとん悲しみエフェクト
+            bird.change_img(8, screen)
             score.update(screen)
             pg.display.update()
             time.sleep(2)
             return
+
+        # EMP発動処理
+        if key_lst[pg.K_e] and score.value >= score_threshold and not emp_active:
+            emp_active = True
+            score.value -= 20
+
+        if emp_active:
+            emp_duration -= 1
+            overlay = pg.Surface((WIDTH, HEIGHT))
+            overlay.set_alpha(128)
+            overlay.fill((255, 255, 0))
+            screen.blit(overlay, (0, 0))
+            for emy in emys:
+                emy.vx, emy.vy = 0, 0
+            for bomb in bombs:
+                bomb.speed = 0
+
+            if emp_duration == 0:
+                emp_active = False
+                emp_duration = 25
+                for emy in emys:
+                    emy.vy = +6
+                for bomb in bombs:
+                    bomb.speed = 6
 
         bird.update(key_lst, screen)
         beams.update()
@@ -331,9 +365,12 @@ def main():
         exps.update()
         exps.draw(screen)
         score.update(screen)
+
         pg.display.update()
         tmr += 1
         clock.tick(50)
+
+
 
 
 if __name__ == "__main__":
