@@ -372,14 +372,10 @@ def main():
                     beams.add(*NeoBeam(bird,5).beams)
                 else:
                     beams.add(Beam(bird))
-            
-        main
             if event.type == pg.KEYDOWN and event.key == pg.K_RSHIFT and score.value >= 100: #発動条件：右Shiftキー押下，かつ，スコアが100より大
                 bird.state = "hyper" #無敵状態に
                 bird.hyper_life = 500 #ライフを500フレームに
                 score.value -= 100 #スコアを100減らす
-=======
-
 
         # 背景の描画を必ず最初に行う
 
@@ -393,7 +389,7 @@ def main():
                     score.value -= 50  # スコア消費
                     walls.add(Shield(bird, 400))  # 防御壁を生成
 
-        main
+        
         screen.blit(bg_img, [0, 0])
         bird.update(key_lst,screen)
         walls.update()
@@ -437,7 +433,7 @@ def main():
         for bomb in pg.sprite.groupcollide(bombs,walls,True,False).keys():
             exps.add(Explosion(bomb, 50))  # 爆発エフェクト
 
-        main
+        
         conbomb = pg.sprite.spritecollide(bird, bombs, True) #conbombに接触した爆弾の情報を格納
         if len(conbomb) != 0: #conbombが長さ0以外なら
             if bird.state == "hyper": #無敵なら
@@ -449,7 +445,7 @@ def main():
                 pg.display.update()
                 time.sleep(2)
                 return
-=======
+
         if len(pg.sprite.spritecollide(bird, bombs, True)) != 0:
             bird.change_img(8, screen)
             score.update(screen)
