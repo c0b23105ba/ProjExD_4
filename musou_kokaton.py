@@ -248,6 +248,30 @@ class Score:
         self.image = self.font.render(f"Score: {self.value}", 0, self.color)
         screen.blit(self.image, self.rect)
 
+class Gravity(pg.sprite.Sprite):
+    """
+    重力場に関するクラス
+    """
+    def __init__(self,life:int):
+        """
+        重力場Surfaceを生成する
+        引数 life：重力場の持続時間
+        """
+        super().__init__()
+        self.image = pg.Surface((WIDTH, HEIGHT))  # 画面全体を覆う
+        pg.draw.rect(self.image, (0, 0, 0), (0, 0, WIDTH, HEIGHT))  # (0, 0, 0)は黒色
+        self.image.set_alpha(128)  # 透明度を設定
+        self.rect = self.image.get_rect()
+        self.life = life  # 重力場の持続フレーム数
+
+    def update(self):
+        """
+        重力場の持続時間を管理し，0未満になったら削除
+        """
+        self.life -= 1
+        if self.life < 0:
+            self.kill()  # 重力場を削除
+
 
 
 class NeoBeam:
@@ -285,6 +309,7 @@ def main():
     beams = pg.sprite.Group()
     exps = pg.sprite.Group()
     emys = pg.sprite.Group()
+    gravity_fields = pg.sprite.Group()  # 重力場のグループを追加
 
     tmr = 0
     clock = pg.time.Clock()
@@ -300,6 +325,10 @@ def main():
                 else:
                     beams.add(Beam(bird))
             
+            if event.type == pg.KEYDOWN and event.key == pg.K_RETURN and score.value >= 10:
+                # スコアが200以上の場合、RETURNキーで重力場を生成
+                gravity_fields.add(Gravity(40))  # 持続時間40フレームの重力場を生成
+                score.value -= 10  # スコアを10点消費
         screen.blit(bg_img, [0, 0])
 
         if tmr%200 == 0:  # 200フレームに1回，敵機を出現させる
@@ -319,6 +348,13 @@ def main():
             exps.add(Explosion(bomb, 50))  # 爆発エフェクト
             score.value += 1  # 1点アップ
 
+        # 重力場と爆弾・敵機との衝突判定
+        for gravity in gravity_fields:
+            for bomb in pg.sprite.spritecollide(gravity, bombs, True):
+                exps.add(Explosion(bomb, 50))
+            for emy in pg.sprite.spritecollide(gravity, emys, True):
+                exps.add(Explosion(emy, 100))
+
         if len(pg.sprite.spritecollide(bird, bombs, True)) != 0:
             bird.change_img(8, screen) # こうかとん悲しみエフェクト
             score.update(screen)
@@ -335,6 +371,8 @@ def main():
         bombs.draw(screen)
         exps.update()
         exps.draw(screen)
+        gravity_fields.update()  # 重力場を更新
+        gravity_fields.draw(screen)  # 重力場を描画
         score.update(screen)
         pg.display.update()
         tmr += 1
