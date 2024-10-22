@@ -89,6 +89,11 @@ class Bird(pg.sprite.Sprite):
         引数2 screen：画面Surface
         """
         sum_mv = [0, 0]
+        # 高速化チェック：左Shiftキーが押されているか
+        if key_lst[pg.K_LSHIFT]:
+            self.speed = 20  # 高速化
+        else:
+            self.speed = 10  # 通常速度に戻す
         for k, mv in __class__.delta.items():
             if key_lst[k]:
                 sum_mv[0] += mv[0]
@@ -141,17 +146,19 @@ class Beam(pg.sprite.Sprite):
     """
     ビームに関するクラス
     """
-    def __init__(self, bird: Bird):
+    def __init__(self, bird: Bird,angle=0):
         """
         ビーム画像Surfaceを生成する
         引数 bird：ビームを放つこうかとん
+        引数　angle:ビームの回転角度
         """
         super().__init__()
         self.vx, self.vy = bird.dire
+        initial_angle =math.degrees(math.atan2(-self.vy,self.vx)) + angle
         angle = math.degrees(math.atan2(-self.vy, self.vx))
         self.image = pg.transform.rotozoom(pg.image.load(f"fig/beam.png"), angle, 2.0)
-        self.vx = math.cos(math.radians(angle))
-        self.vy = -math.sin(math.radians(angle))
+        self.vx = math.cos(math.radians(initial_angle))
+        self.vy = -math.sin(math.radians(initial_angle))
         self.rect = self.image.get_rect()
         self.rect.centery = bird.rect.centery+bird.rect.height*self.vy
         self.rect.centerx = bird.rect.centerx+bird.rect.width*self.vx
@@ -241,6 +248,55 @@ class Score:
         self.image = self.font.render(f"Score: {self.value}", 0, self.color)
         screen.blit(self.image, self.rect)
 
+class Gravity(pg.sprite.Sprite):
+    """
+    重力場に関するクラス
+    """
+    def __init__(self,life:int):
+        """
+        重力場Surfaceを生成する
+        引数 life：重力場の持続時間
+        """
+        super().__init__()
+        self.image = pg.Surface((WIDTH, HEIGHT))  # 画面全体を覆う
+        pg.draw.rect(self.image, (0, 0, 0), (0, 0, WIDTH, HEIGHT))  # (0, 0, 0)は黒色
+        self.image.set_alpha(128)  # 透明度を設定
+        self.rect = self.image.get_rect()
+        self.life = life  # 重力場の持続フレーム数
+
+    def update(self):
+        """
+        重力場の持続時間を管理し，0未満になったら削除
+        """
+        self.life -= 1
+        if self.life < 0:
+            self.kill()  # 重力場を削除
+
+
+
+class NeoBeam:
+    """
+    複数方向にビームを発射するクラス。
+    """
+    def __init__(self,bird:Bird,num:int):
+        """
+        NeoBeamクラスの初期化
+        引数1bird:ビームを発射するこうかとん
+        引数2num:発射するビームの数
+        """
+        self.beams=self.gen_beams(bird,num)
+    
+    def gen_beams(self,bird:Bird,num:int) ->list:
+        """
+        指定されたビーム数だけ異なる角度のビームを生成する。
+        """
+        beams=[]
+        angles=range(-50,51,100//(num-1))  # 角度を等間隔で設定
+        for angle in angles:
+            beams.append(Beam(bird,angle))
+        return beams
+        
+
 
 def main():
     pg.display.set_caption("真！こうかとん無双")
@@ -253,6 +309,11 @@ def main():
     beams = pg.sprite.Group()
     exps = pg.sprite.Group()
     emys = pg.sprite.Group()
+    gravity_fields = pg.sprite.Group()  # 重力場のグループを追加
+
+    emp_active = False
+    emp_duration = 100
+    score_threshold = 20  # EMP発動に必要な最低スコア
 
     tmr = 0
     clock = pg.time.Clock()
@@ -263,31 +324,83 @@ def main():
                 return 0
             if event.type == pg.KEYDOWN and event.key == pg.K_SPACE:
                 beams.add(Beam(bird))
+                if key_lst[pg.K_LSHIFT]:
+                    beams.add(*NeoBeam(bird,5).beams)
+                else:
+                    beams.add(Beam(bird))
+            
+
+
+        # 背景の描画を必ず最初に行う
+
+            if event.type == pg.KEYDOWN and event.key == pg.K_RETURN and score.value >= 10:
+                # スコアが200以上の場合、RETURNキーで重力場を生成
+                gravity_fields.add(Gravity(40))  # 持続時間40フレームの重力場を生成
+                score.value -= 10  # スコアを10点消費
+
         screen.blit(bg_img, [0, 0])
 
-        if tmr%200 == 0:  # 200フレームに1回，敵機を出現させる
+        # 敵機の生成
+        if tmr % 200 == 0:
             emys.add(Enemy())
 
+        # 敵機の爆弾投下処理
         for emy in emys:
-            if emy.state == "stop" and tmr%emy.interval == 0:
-                # 敵機が停止状態に入ったら，intervalに応じて爆弾投下
+            if emy.state == "stop" and tmr % emy.interval == 0:
                 bombs.add(Bomb(emy, bird))
 
+        # 敵機とビームの衝突判定
         for emy in pg.sprite.groupcollide(emys, beams, True, True).keys():
-            exps.add(Explosion(emy, 100))  # 爆発エフェクト
-            score.value += 10  # 10点アップ
-            bird.change_img(6, screen)  # こうかとん喜びエフェクト
+            exps.add(Explosion(emy, 100))
+            score.value += 10
+            bird.change_img(6, screen)
 
+        # 爆弾とビームの衝突判定
         for bomb in pg.sprite.groupcollide(bombs, beams, True, True).keys():
-            exps.add(Explosion(bomb, 50))  # 爆発エフェクト
-            score.value += 1  # 1点アップ
+            exps.add(Explosion(bomb, 50))
+            score.value += 1
+
+
+        # こうかとんと爆弾の衝突判定
+
+        # 重力場と爆弾・敵機との衝突判定
+        for gravity in gravity_fields:
+            for bomb in pg.sprite.spritecollide(gravity, bombs, True):
+                exps.add(Explosion(bomb, 50))
+            for emy in pg.sprite.spritecollide(gravity, emys, True):
+                exps.add(Explosion(emy, 100))
+
 
         if len(pg.sprite.spritecollide(bird, bombs, True)) != 0:
-            bird.change_img(8, screen) # こうかとん悲しみエフェクト
+            bird.change_img(8, screen)
             score.update(screen)
             pg.display.update()
             time.sleep(2)
             return
+
+        # EMP発動処理
+        if key_lst[pg.K_e] and score.value >= score_threshold and not emp_active:
+            emp_active = True
+            score.value -= 20
+
+        if emp_active:
+            emp_duration -= 1
+            overlay = pg.Surface((WIDTH, HEIGHT))
+            overlay.set_alpha(128)
+            overlay.fill((255, 255, 0))
+            screen.blit(overlay, (0, 0))
+            for emy in emys:
+                emy.vx, emy.vy = 0, 0
+            for bomb in bombs:
+                bomb.speed = 0
+
+            if emp_duration == 0:
+                emp_active = False
+                emp_duration = 25
+                for emy in emys:
+                    emy.vy = +6
+                for bomb in bombs:
+                    bomb.speed = 6
 
         bird.update(key_lst, screen)
         beams.update()
@@ -298,10 +411,15 @@ def main():
         bombs.draw(screen)
         exps.update()
         exps.draw(screen)
+        gravity_fields.update()  # 重力場を更新
+        gravity_fields.draw(screen)  # 重力場を描画
         score.update(screen)
+
         pg.display.update()
         tmr += 1
         clock.tick(50)
+
+
 
 
 if __name__ == "__main__":
