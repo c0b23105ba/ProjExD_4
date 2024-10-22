@@ -5,6 +5,8 @@ import sys
 import time
 import pygame as pg
 
+from math import atan2, degrees
+
 
 WIDTH = 1100  # ゲームウィンドウの幅
 HEIGHT = 650  # ゲームウィンドウの高さ
@@ -223,6 +225,39 @@ class Enemy(pg.sprite.Sprite):
         self.rect.move_ip(self.vx, self.vy)
 
 
+
+class Shield(pg.sprite.Sprite):
+    """こうかとんの前に出現する防御壁"""
+
+    def __init__(self, bird: Bird, life: int):
+        super().__init__()
+        self.bird = bird
+        # 手順1: 壁のサイズ (幅20, 高さ: こうかとんの2倍)
+        width, height = 20, bird.rect.height * 2
+        self.image = pg.Surface((width, height))
+        pg.draw.rect(self.image, (0, 0, 255), (0, 0, width, height))  # 青色の壁
+        # 手順2: こうかとんの前に壁を配置
+        vx, vy = bird.dire
+        angle = degrees(atan2(-vy,vx))
+        self.image = pg.transform.rotozoom(self.image, angle, 1.0)
+        self.image.set_colorkey((0, 0, 0))
+        offset_x, offset_y = vx * width, vy * height
+        self.rect = self.image.get_rect(center=(
+            bird.rect.centerx + offset_x, 
+            bird.rect.centery + offset_y,
+        ))
+        self.lifetime = 400  # 壁の寿命 (400フレーム)
+
+ 
+    def update(self):
+        """防御壁の寿命を管理"""
+        self.lifetime -= 1
+        if self.lifetime <= 0:
+            self.kill()  # 寿命が尽きたら消滅
+
+
+
+
 class Score:
     """
     打ち落とした爆弾，敵機の数をスコアとして表示するクラス
@@ -249,6 +284,7 @@ def main():
     score = Score()
 
     bird = Bird(3, (900, 400))
+    walls = pg.sprite.Group()  # 防御壁を管理するグループ
     bombs = pg.sprite.Group()
     beams = pg.sprite.Group()
     exps = pg.sprite.Group()
@@ -263,7 +299,20 @@ def main():
                 return 0
             if event.type == pg.KEYDOWN and event.key == pg.K_SPACE:
                 beams.add(Beam(bird))
+            # 防御壁の発動条件: CapsLockキー押下 & スコア50以上 & 壁が存在しない
+            if event.type == pg.KEYDOWN and event.key == pg.K_s and len(walls) == 0:
+                if score.value >= 50:
+                    score.value -= 50  # スコア消費
+                    walls.add(Shield(bird, 400))  # 防御壁を生成
+
         screen.blit(bg_img, [0, 0])
+        bird.update(key_lst,screen)
+        walls.update()
+
+        # 描画処理
+        walls.draw(screen)
+        screen.blit(bird.image, bird.rect)
+
 
         if tmr%200 == 0:  # 200フレームに1回，敵機を出現させる
             emys.add(Enemy())
@@ -281,6 +330,9 @@ def main():
         for bomb in pg.sprite.groupcollide(bombs, beams, True, True).keys():
             exps.add(Explosion(bomb, 50))  # 爆発エフェクト
             score.value += 1  # 1点アップ
+
+        for bomb in pg.sprite.groupcollide(bombs,walls,True,False).keys():
+            exps.add(Explosion(bomb, 50))  # 爆発エフェクト
 
         if len(pg.sprite.spritecollide(bird, bombs, True)) != 0:
             bird.change_img(8, screen) # こうかとん悲しみエフェクト
